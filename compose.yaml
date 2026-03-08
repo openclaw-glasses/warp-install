@@ -1,0 +1,24 @@
+services:
+  warp:
+    image: ${IMAGE:-caomingjun/warp:latest}
+    container_name: ${CONTAINER_NAME:-warp}
+    restart: always
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - AUDIT_WRITE
+      - MKNOD
+    device_cgroup_rules:
+      - 'c 10:200 rwm'
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: '1'
+      net.ipv6.conf.all.disable_ipv6: '0'
+    security_opt:
+      - label=disable
+    ports:
+      - '${EXTERNAL_PORT:-1080}:1080'
+    environment:
+      WARP_SLEEP: ${WARP_SLEEP:-10}
+      GOST_ARGS: -L socks5://${SOCKS_USER:-admin}:${SOCKS_PASS:-admin}@:1080
+    volumes:
+      - ${DATA_DIR:-./data}:/var/lib/cloudflare-warp
