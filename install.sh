@@ -8,9 +8,42 @@ DEFAULT_IMAGE="caomingjun/warp:latest"
 DEFAULT_PORT="1080"
 DEFAULT_USER="admin"
 DEFAULT_PASS="admin"
-DEFAULT_DATA_DIR="$SCRIPT_DIR/data"
 DEFAULT_WARP_SLEEP="10"
 DEFAULT_MIRROR_PREFIX=""
+
+# 根据操作系统和用户权限，返回合适的默认数据目录
+get_default_data_dir() {
+  local container_name="$1"
+  local os="$2"
+  
+  case "$os" in
+    linux)
+      # Linux: root 用户用 /var/lib/warp-proxy/，普通用户用 ~/.local/share/warp-proxy/
+      if [ "$(id -u)" -eq 0 ]; then
+        echo "/var/lib/warp-proxy/${container_name}"
+      else
+        echo "$HOME/.local/share/warp-proxy/${container_name}"
+      fi
+      ;;
+    darwin)
+      # macOS: ~/Library/Application Support/warp-proxy/
+      mkdir -p "$HOME/Library/Application Support/warp-proxy" 2>/dev/null || true
+      echo "$HOME/Library/Application Support/warp-proxy/${container_name}"
+      ;;
+    windows)
+      # Windows: %APPDATA%\warp-proxy\
+      if [ -n "${APPDATA:-}" ]; then
+        echo "${APPDATA}\\warp-proxy\\${container_name}"
+      else
+        echo "$HOME/warp-proxy/${container_name}"
+      fi
+      ;;
+    *)
+      # 未知系统，回退到脚本目录
+      echo "$SCRIPT_DIR/data"
+      ;;
+  esac
+}
 
 say() { printf '%s\n' "$*"; }
 warn() { printf '[warn] %s\n' "$*"; }
@@ -173,10 +206,41 @@ main() {
   ensure_docker_running
 
   CONTAINER_NAME="$(prompt_default '容器名' "${CONTAINER_NAME:-$DEFAULT_CONTAINER_NAME}")"
+  
+  # 检测是否已有同名容器，复用其数据目录
+  OLD_DATA_DIR=""
+  if $SUDO docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+    OLD_DATA_DIR="$($SUDO docker inspect "$CONTAINER_NAME" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/cloudflare-warp"}}{{.Source}}{{end}}{{end}}')"
+    if [ -n "$OLD_DATA_DIR" ]; then
+      say "[info] 检测到已存在容器，发现原有数据目录：$OLD_DATA_DIR"
+    fi
+  fi
+  
+  # 计算默认数据目录（如果 config.env 没有指定）
+  if [ -z "${DATA_DIR:-}" ]; then
+    DATA_DIR="$(get_default_data_dir "$CONTAINER_NAME" "$OS")"
+  fi
+  
+  # 如果有原有数据目录，优先提示复用
+  if [ -n "$OLD_DATA_DIR" ]; then
+    DATA_DIR="$(prompt_default '数据目录（复用原有）' "$OLD_DATA_DIR")"
+  else
+    DATA_DIR="$(prompt_default '数据目录' "$DATA_DIR")"
+  fi
+  
+  # macOS 额外提示
+  if [ "$OS" = "macos" ]; then
+    say "[info] macOS 建议数据目录放在用户 Library 下，避免权限问题。"
+    say "  当前设置：$DATA_DIR"
+    read -r -p "是否修改数据目录？[y/N] " change_dir
+    if [[ "$change_dir" =~ ^[Yy]$ ]]; then
+      read -r -p "请输入新的数据目录路径：" DATA_DIR
+    fi
+  fi
+  
   EXTERNAL_PORT="$(prompt_default '对外端口' "${EXTERNAL_PORT:-$DEFAULT_PORT}")"
   SOCKS_USER="$(prompt_default 'SOCKS5 用户名' "${SOCKS_USER:-$DEFAULT_USER}")"
   SOCKS_PASS="$(prompt_default 'SOCKS5 密码' "${SOCKS_PASS:-$DEFAULT_PASS}")"
-  DATA_DIR="$(prompt_default '数据目录' "${DATA_DIR:-$DEFAULT_DATA_DIR}")"
   WARP_SLEEP="$(prompt_default 'WARP_SLEEP' "${WARP_SLEEP:-$DEFAULT_WARP_SLEEP}")"
   MIRROR_PREFIX="$(prompt_default '镜像加速前缀（可留空，例如 docker.1ms.run）' "${MIRROR_PREFIX:-$DEFAULT_MIRROR_PREFIX}")"
   SAVE_PASSWORD="$(prompt_yes_no '是否把密码保存到本地配置文件' "${SAVE_PASSWORD:-n}")"
