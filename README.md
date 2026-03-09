@@ -61,6 +61,41 @@
 - 密码：`admin`
 - 容器名：`warp`
 
+## 快速安装
+
+### 一键安装（推荐）
+
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/openclaw-glasses/warp-install/main/install.sh | bash
+```
+
+**Windows PowerShell:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "iwr -UseBasicParsing https://raw.githubusercontent.com/openclaw-glasses/warp-install/main/install.ps1 | iex"
+```
+
+### 本地安装
+
+下载脚本后本地运行，适合需要自定义或离线场景：
+
+```bash
+# 克隆仓库
+git clone https://github.com/openclaw-glasses/warp-install.git
+cd warp-install
+
+# Linux / macOS
+chmod +x ./install.sh ./uninstall.sh
+./install.sh
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+---
+
 ## 运行方式
 
 ### Linux / macOS
